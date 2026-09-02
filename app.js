@@ -53,8 +53,8 @@
         if (i >= 0) { sites[i] = { ...sites[i], ...data }; write(sites); onChange(); }
       },
       async remove(id) { sites = sites.filter((s) => s.id !== id); write(sites); onChange(); },
-      async getGate() { return localStorage.getItem("aipark.gate"); },
-      async setGate(hash) { localStorage.setItem("aipark.gate", hash); },
+      async getSetting(key) { return localStorage.getItem("aipark.setting." + key); },
+      async setSetting(key, hash) { localStorage.setItem("aipark.setting." + key, hash); },
     };
   }
 
@@ -88,16 +88,16 @@
         try { await col.doc(id).delete(); }
         catch (e) { alert("削除に失敗しました。\n" + e.message); throw e; }
       },
-      async getGate() {
+      async getSetting(key) {
         try {
-          const snap = await db.collection("settings").doc("gate").get();
+          const snap = await db.collection("settings").doc(key).get();
           return snap.exists ? (snap.data().hash || null) : null;
-        } catch (e) { console.error("合言葉設定の読み込み失敗", e); return null; }
+        } catch (e) { console.error("設定の読み込み失敗", e); return null; }
       },
-      async setGate(hash) {
-        try { await db.collection("settings").doc("gate").set({ hash }); }
+      async setSetting(key, hash) {
+        try { await db.collection("settings").doc(key).set({ hash }); }
         catch (e) {
-          alert("合言葉の保存に失敗しました。\nFirestore のルールで settings コレクションへの書き込みを許可してください。\n" + e.message);
+          alert("保存に失敗しました。\nFirestore のルールで settings コレクションへの書き込みを許可してください。\n" + e.message);
           throw e;
         }
       },
@@ -157,15 +157,15 @@
         if (error) { alert("削除に失敗しました。\n" + error.message); throw error; }
         await refetch();
       },
-      async getGate() {
-        const { data, error } = await sb.from("settings").select("hash").eq("key", "gate").maybeSingle();
-        if (error) { console.error("合言葉設定の読み込み失敗", error); return null; }
+      async getSetting(key) {
+        const { data, error } = await sb.from("settings").select("hash").eq("key", key).maybeSingle();
+        if (error) { console.error("設定の読み込み失敗", error); return null; }
         return data ? data.hash : null;
       },
-      async setGate(hash) {
-        const { error } = await sb.from("settings").upsert({ key: "gate", hash });
+      async setSetting(key, hash) {
+        const { error } = await sb.from("settings").upsert({ key, hash });
         if (error) {
-          alert("合言葉の保存に失敗しました。\nSupabase のテーブル/ポリシー設定を確認してください。\n" + error.message);
+          alert("保存に失敗しました。\nSupabase のテーブル/ポリシー設定を確認してください。\n" + error.message);
           throw error;
         }
       },
@@ -518,16 +518,21 @@
   }
 
   function showGateSection(id) {
-    ["gateLoading", "gateLock", "gateSetup"].forEach((s) => {
+    ["gateLoading", "gateLock", "gateSetup", "gateOwner"].forEach((s) => {
       $("#" + s).hidden = s !== id;
     });
     gateOverlay.hidden = false;
     document.body.style.overflow = "hidden";
   }
 
+  function shakeGate() {
+    gateOverlay.classList.add("shake");
+    setTimeout(() => gateOverlay.classList.remove("shake"), 420);
+  }
+
   async function runGate() {
     showGateSection("gateLoading");
-    const hash = await store.getGate();
+    const hash = await store.getSetting("gate");
     if (!hash) { openGateSetup(false); return; }          // 未設定 → オーナー初期設定
     if (hash === NO_LOCK) { enterApp(); return; }         // ロックしない設定
     currentGateHash = hash;
@@ -600,12 +605,12 @@
     submit.disabled = true; submit.textContent = "保存中…";
     try {
       const h = await hashPass(p1);
-      await store.setGate(h);
+      await store.setSetting("gate", h);
       currentGateHash = h;
       localStorage.setItem(UNLOCK_KEY, h);
       enterApp();
     } catch {
-      /* setGate 側で通知済み */
+      /* setSetting 側で通知済み */
     } finally {
       submit.disabled = false; submit.textContent = orig;
     }
@@ -613,11 +618,66 @@
 
   // スキップ（ロックしない）
   $("#gateSkip").addEventListener("click", async () => {
-    try { await store.setGate(NO_LOCK); currentGateHash = NO_LOCK; } catch {}
+    try { await store.setSetting("gate", NO_LOCK); currentGateHash = NO_LOCK; } catch {}
     localStorage.removeItem(UNLOCK_KEY);
     enterApp();
   });
   $("#gateCancelChange").addEventListener("click", () => enterApp());
+
+  /* ---------- オーナー確認（合言葉変更はオーナーのみ） ---------- */
+  let gateOwnerMode = "verify"; // "setup" or "verify"
+  function openGateOwner(mode) {
+    gateOwnerMode = mode;
+    showGateSection("gateOwner");
+    $("#gateOwnerPass").value = "";
+    $("#gateOwnerPass2").value = "";
+    $("#gateOwnerError").hidden = true;
+    const isSetup = mode === "setup";
+    $("#gateOwnerPass2").hidden = !isSetup;
+    $("#gateOwnerMsg").innerHTML = isSetup
+      ? "オーナーパスワードを設定してください。<br>これを知っている人だけが「合言葉」を変更できます。"
+      : "オーナーパスワードを入力してください。";
+    $("#gateOwnerSubmit").textContent = isSetup ? "設定する" : "確認";
+    setTimeout(() => $("#gateOwnerPass").focus(), 50);
+  }
+
+  async function startChangeFlow() {
+    // 先にオーナーパスワードを確認（未設定なら設定）
+    const ownerHash = await store.getSetting("owner");
+    openGateOwner(ownerHash ? "verify" : "setup");
+  }
+
+  $("#gateOwnerForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const p1 = $("#gateOwnerPass").value.trim();
+    const err = $("#gateOwnerError");
+
+    if (gateOwnerMode === "setup") {
+      const p2 = $("#gateOwnerPass2").value.trim();
+      if (p1.length < 2) { err.textContent = "オーナーパスワードは2文字以上にしてください。"; err.hidden = false; return; }
+      if (p1 !== p2) { err.textContent = "2つのパスワードが一致しません。"; err.hidden = false; return; }
+      const submit = $("#gateOwnerSubmit");
+      const orig = submit.textContent;
+      submit.disabled = true; submit.textContent = "保存中…";
+      try {
+        await store.setSetting("owner", await hashPass(p1));
+        openGateSetup(true); // オーナー設定後、合言葉変更画面へ
+      } catch { /* 通知済み */ }
+      finally { submit.disabled = false; submit.textContent = orig; }
+    } else {
+      const ownerHash = await store.getSetting("owner");
+      if ((await hashPass(p1)) === ownerHash) {
+        openGateSetup(true); // 確認OK → 合言葉変更画面へ
+      } else {
+        err.textContent = "オーナーパスワードが違います";
+        err.hidden = false;
+        $("#gateOwnerPass").value = "";
+        $("#gateOwnerPass").focus();
+        shakeGate();
+      }
+    }
+  });
+  $("#gateOwnerCancel").addEventListener("click", () => enterApp());
 
   // ヘッダー：ロック / 合言葉変更
   $("#lockBtn").addEventListener("click", () => {
@@ -625,7 +685,7 @@
     if (currentGateHash && currentGateHash !== NO_LOCK) openGateLock();
     else openGateSetup(false);
   });
-  $("#changePassBtn").addEventListener("click", () => openGateSetup(currentGateHash && currentGateHash !== NO_LOCK));
+  $("#changePassBtn").addEventListener("click", startChangeFlow);
 
   /* ---------- 起動 ---------- */
   initStore();

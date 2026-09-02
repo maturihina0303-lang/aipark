@@ -63,6 +63,18 @@
         <button class="gate-link" id="gateSkip" type="button">スキップ（ロックしない）</button>
         <button class="gate-link" id="gateCancelChange" type="button" hidden>キャンセル</button>
       </div>
+
+      <!-- オーナー確認（合言葉変更はオーナーのみ） -->
+      <div id="gateOwner" hidden>
+        <p class="gate-msg" id="gateOwnerMsg"></p>
+        <form id="gateOwnerForm">
+          <input type="text" id="gateOwnerPass" placeholder="オーナーパスワード" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+          <input type="text" id="gateOwnerPass2" placeholder="もう一度入力" autocomplete="off" autocapitalize="off" spellcheck="false" hidden>
+          <p class="gate-error" id="gateOwnerError" hidden></p>
+          <button class="btn btn-primary gate-btn" type="submit" id="gateOwnerSubmit">確認</button>
+        </form>
+        <button class="gate-link" id="gateOwnerCancel" type="button">キャンセル</button>
+      </div>
     </div>
   </div>
 

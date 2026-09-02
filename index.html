@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIパーク｜自作AIサイトまとめ</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
+</head>
+<body>
+
+  <!-- ===== ヘッダー ===== -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand" id="brandHome" title="トップへ">
+        <span class="brand-logo">🌳</span>
+        <div class="brand-text">
+          <h1>AIパーク</h1>
+          <p>自作AIサイトのまとめ広場</p>
+        </div>
+        <span class="mode-badge" id="modeBadge" title="共有状態"></span>
+      </div>
+      <div class="header-actions">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="search" id="searchInput" placeholder="サイト名・説明・投稿者で検索…" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" id="openAddBtn">＋ 投稿する</button>
+        <button class="btn btn-ghost btn-sm" id="changePassBtn" hidden>合言葉変更</button>
+        <button class="btn btn-ghost btn-sm" id="lockBtn" hidden>🔒 ロック</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== 合言葉ロック画面 ===== -->
+  <div class="gate" id="gateOverlay">
+    <div class="gate-card">
+      <div class="gate-logo">🌳</div>
+      <h1 class="gate-brand">AIパーク</h1>
+
+      <div id="gateLoading" class="gate-msg">読み込み中…</div>
+
+      <!-- 入る -->
+      <div id="gateLock" hidden>
+        <p class="gate-msg">合言葉を入力してください</p>
+        <form id="gateLockForm">
+          <input type="text" id="gatePass" placeholder="合言葉" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+          <p class="gate-error" id="gateError" hidden>合言葉が違います</p>
+          <button class="btn btn-primary gate-btn" type="submit">入る</button>
+        </form>
+        <label class="gate-remember"><input type="checkbox" id="gateRemember" checked> この端末を記憶する</label>
+      </div>
+
+      <!-- 初回設定 / 変更 -->
+      <div id="gateSetup" hidden>
+        <p class="gate-msg" id="gateSetupMsg">はじめに「合言葉」を決めてください。<br>これを知っている人だけが入れます。</p>
+        <form id="gateSetupForm">
+          <input type="text" id="gateNew" placeholder="合言葉を決める" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+          <input type="text" id="gateNew2" placeholder="もう一度入力" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+          <p class="gate-error" id="gateSetupError" hidden></p>
+          <button class="btn btn-primary gate-btn" type="submit" id="gateSetupSubmit">設定して入る</button>
+        </form>
+        <button class="gate-link" id="gateSkip" type="button">スキップ（ロックしない）</button>
+        <button class="gate-link" id="gateCancelChange" type="button" hidden>キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== メイン ===== -->
+  <main class="container">
+    <div class="toolbar">
+      <div class="count-info"><span id="countLabel">0</span> 件のサイト</div>
+      <div class="sort-box">
+        <label for="sortSelect">並び替え</label>
+        <select id="sortSelect">
+          <option value="new">新しい順</option>
+          <option value="old">古い順</option>
+          <option value="name">名前順</option>
+          <option value="author">投稿者順</option>
+        </select>
+      </div>
+    </div>
+
+    <section id="grid" class="grid"></section>
+
+    <div id="emptyState" class="empty-state" hidden>
+      <div class="empty-emoji">🌱</div>
+      <h2>まだ投稿がありません</h2>
+      <p>右上の「＋ 投稿する」から、あなたの自作AIサイトを追加しましょう。</p>
+      <button class="btn btn-primary" id="emptyAddBtn">＋ 最初のサイトを投稿</button>
+    </div>
+  </main>
+
+  <!-- ===== 投稿・編集モーダル ===== -->
+  <div class="modal-overlay" id="modalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header">
+        <h2 id="modalTitle">サイトを投稿</h2>
+        <button class="icon-btn" id="closeModalBtn" aria-label="閉じる">✕</button>
+      </div>
+
+      <form id="siteForm" class="modal-body">
+        <input type="hidden" id="editId">
+
+        <div class="field">
+          <label for="fName">サイト名 <span class="req">必須</span></label>
+          <input type="text" id="fName" maxlength="60" placeholder="例）お絵かきAIジェネレーター" required>
+        </div>
+
+        <div class="field">
+          <label for="fUrl">サイトのURL <span class="req">必須</span></label>
+          <input type="url" id="fUrl" placeholder="https://example.com" required>
+        </div>
+
+        <div class="field">
+          <label for="fDesc">説明文</label>
+          <textarea id="fDesc" rows="3" maxlength="400" placeholder="どんなAIサイトか説明を書きましょう"></textarea>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="fAuthor">投稿者名</label>
+            <input type="text" id="fAuthor" maxlength="40" placeholder="例）ひなこ">
+          </div>
+          <div class="field">
+            <label for="fPass">合言葉メモ <span class="hint-inline">🔒非公開</span></label>
+            <input type="text" id="fPass" maxlength="80" placeholder="ログイン用の合言葉など">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>サムネイル</label>
+          <div class="thumb-uploader">
+            <div class="thumb-preview" id="thumbPreview">
+              <span class="thumb-placeholder">画像未設定</span>
+            </div>
+            <div class="thumb-controls">
+              <input type="file" id="fThumb" accept="image/*" hidden>
+              <button type="button" class="btn btn-ghost" id="pickThumbBtn">画像を選ぶ</button>
+              <button type="button" class="btn btn-ghost btn-danger-ghost" id="clearThumbBtn" hidden>削除</button>
+              <p class="thumb-note">未設定の場合は「ロゴ＋サイト名」の自動サムネになります。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="cancelBtn">キャンセル</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">投稿する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== 詳細モーダル ===== -->
+  <div class="modal-overlay" id="detailOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2 id="detailTitle">詳細</h2>
+        <button class="icon-btn" id="closeDetailBtn" aria-label="閉じる">✕</button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <p>🌳 AIパーク — 自作AIサイトまとめ広場</p>
+  </footer>
+
+  <template id="cardTemplate">
+    <article class="card">
+      <a class="card-thumb" target="_blank" rel="noopener"></a>
+      <div class="card-body">
+        <h3 class="card-name"></h3>
+        <p class="card-desc"></p>
+        <div class="card-meta">
+          <span class="card-author"></span>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a class="btn btn-sm btn-primary card-visit" target="_blank" rel="noopener">サイトへ</a>
+        <button class="btn btn-sm btn-ghost card-detail">詳細</button>
+        <button class="btn btn-sm btn-ghost card-edit" title="編集">✎</button>
+        <button class="btn btn-sm btn-ghost btn-danger-ghost card-delete" title="削除">🗑</button>
+      </div>
+    </article>
+  </template>
+
+  <!-- 共有機能。未設定・ネット未接続でも自動で「このPCのみ」モードで動きます -->
+  <!-- Supabase（優先） -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4"></script>
+  <script src="supabase-config.js"></script>
+  <!-- Firebase（Supabase未設定時のみ使用） -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
